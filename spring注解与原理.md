@@ -220,6 +220,7 @@ applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);
 @AfterThrowing:在目标方法异常后切入.    
 @Around:jointPoint.procced()    
 
+JoinPoint必须在自定义切面方法的第一个参数,否则无法识别
 
 #### AOP原理
 
@@ -272,13 +273,35 @@ AnnotationAwareAspectJAutoProxyCreator.initBeanFactory()
 	8) 把BeanPostProcessor注册到BeanFactory中:
 		beanFactory.addBeanPostProcessor(postProcessor)
 
-JoinPoint必须在自定义切面方法的第一个参数,否则无法识别	
-	
-	
-	
-	
-	
-	
+4) this.finishBeanFactoryInitialization(beanFactory): BeanFactory初始化.
+   触发自[AnnotationAwareAspectJAutoProxyCreator -> InstantiationAwareBeanPostProcessor]
+   1) 遍历获取容器中所有的bean,依次创建对象getBean(beanName);getBean->doGetBean()->getSingleton()
+   2) 创建bean
+	  AnnotationAwareAspectJAutoProxyCreator 在所有bean创建前会有一个拦截
+	   1) 线程缓存中获取当前bean,如果能获取到,直接使用;否则再创建.只要创建好的bean都会被缓存起来.
+	   2) createBean():创建
+		  AnnotationAwareAspectJAutoProxyCreator 在创建任何bean前都尝试
+		  BeanPostProcessor: 是在Bean对象创建完成初始化前后调用    
+		  InstantiationAwareBeanPostProcessor: 在创建bean实例之前先尝试用后置处理器返回对象的
+   			1) resolveBeforeInstantiation(beanName, mbdToUse): 解析BeforeInstantiation
+			希望后置处理器在此能返回一个代理对象,如果能返回代理对象就使用,如果不能就继续
+		   		1) 后置处理器先尝试返回对象
+					bean = applyBeanPostProcessorsBeforeInstantiation(targetType, beanName);
+				   		拿到多有后置处理器,如果是InstantiationAwareBeanPostProcessor 
+				   		就执行postProcessBeforeInstantiation
+				    if (bean != null) {
+				   		bean = applyBeanPostProcessorsAfterInitialization(bean, beanName);
+				    }
+				2) doCreateBean(beanName, mbdToUse, args);真正去创建一个bean 
+				3) 
+
+
+
+- AnnotationAwareAspectJAutoProxyCreator[InstantiationAwareBeanPostProcessor]
+
+1) 每一个bean创建前,调用postProcessBeforeInstantiation
+	关系切面类和被注入类的场景
+   1) 判断当前bean是否在
 	
 	
 	
