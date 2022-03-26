@@ -116,6 +116,9 @@ AutowiredAnnotationBeanPostProcessor:解析完成自动装配功能
 1) -Dspring.profiles.active=test
 2)applicationContext.getEnvironment().setActiveProfiles("dev")
 
+- 配置文件标识符替换类
+org.springframework.core.env.AbstractPropertyResolver
+
 ### bean的生命周期
 
 ```
@@ -279,10 +282,10 @@ AnnotationAwareAspectJAutoProxyCreator.initBeanFactory()
    2) 创建bean
 	  AnnotationAwareAspectJAutoProxyCreator 在所有bean创建前会有一个拦截
 	   1) 线程缓存中获取当前bean,如果能获取到,直接使用;否则再创建.只要创建好的bean都会被缓存起来.
-	   2) createBean():创建
-		  AnnotationAwareAspectJAutoProxyCreator 在创建任何bean前都尝试
+	   2) createBean():创建bean;    
+		  AnnotationAwareAspectJAutoProxyCreator 在创建任何bean前都尝试进行切面操作
 		  BeanPostProcessor: 是在Bean对象创建完成初始化前后调用    
-		  InstantiationAwareBeanPostProcessor: 在创建bean实例之前先尝试用后置处理器返回对象的
+		  InstantiationAwareBeanPostProcessor: 在创建bean实例之前先尝试用后置处理器返回对象的实例
    			1) resolveBeforeInstantiation(beanName, mbdToUse): 解析BeforeInstantiation
 			希望后置处理器在此能返回一个代理对象,如果能返回代理对象就使用,如果不能就继续
 		   		1) 后置处理器先尝试返回对象
@@ -300,15 +303,161 @@ AnnotationAwareAspectJAutoProxyCreator.initBeanFactory()
 - AnnotationAwareAspectJAutoProxyCreator[InstantiationAwareBeanPostProcessor]
 
 1) 每一个bean创建前,调用postProcessBeforeInstantiation
-	关系切面类和被注入类的场景
-   1) 判断当前bean是否在
+	关联切面类和被注入类的场景
+   1) 判断当前bean是否在在advisedBeans中(保存了所需的增强bean)
+   2) 判断当前bean是否是基础类型的Advice,Pointcut,Advisor,AopInfrastructureBean,或者是否是切面[org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator#isInfrastructureClass]
+   3) 是否需要跳过
+      1) 获取获选增强器(切面里的通知方法)[List<Advisor> candidateAdvisors]
+      2) 每一个封装的通知方法的增强器是InstantiationModelAwarePointcutAdvisor:
+      3) 判断每一个增强器是否是 AspectJPointcutAdvisor 类型: 是则返回true;否则返回false;
+2) 创建对象 org.springframework.aop.framework.autoproxy.AbstractAutoProxyCreator#postProcessAfterInitialization
+   1)  包装如果需要的情况下.return return wrapIfNecessary(bean, beanName, cacheKey);
+   2)  获取当前bean的所有增强器(通知方法)Object[] specificInterceptors = getAdvicesAndAdvisorsForBean(bean.getClass(), beanName, null);
+       1)  找到候选的所有增强器(找哪些通知方法是需要切入当前bean方法的)
+       2)  获取到能在bean中使用的增强器
+       3)  给增强器排序
+    3) 保存当前bean在adviseBeans中
+    4) 如果当前bean需要增强,创建当前bean的代理对象
+       1) 获取所有增强器(通知方法)
+       2) 保存到proxyFactory
+       3) 创建代理对象:spring自动决定
+          1) org.springframework.aop.framework.CglibAopProxy#getProxy(java.lang.ClassLoader): cglib动态代理
+          2) org.springframework.aop.framework.JdkDynamicAopProxy#getProxy(java.lang.ClassLoader): jdk动态代理
+    5) 给容器中返回当前组件使用cglib增强了的代理对象
+    6) 以后容器中获取到的就是组件的代理对象,执行目标方法时,代理对象就会执行通知方法的流程; 
+3) 目标方法执行
+   1) 容器中保存了组件的代理对象(cglib增强后对象),这个对象里保存了详细信息(增强器,目标..)
+   2) 拦截目标方法的执行: org.springframework.aop.framework.CglibAopProxy.DynamicAdvisedInterceptor#intercept
+   3) 根据 ProxyFactory 对象获取将要执行的目标方法拦截器链
+      1) List<Object> chain = this.advised.getInterceptorsAndDynamicInterceptionAdvice(method, targetClass);
+      2) 拦截器包括:默认上下文方法通知类 ExposeInvocationInterceptor 和 自定义的增强器(切面通知方法)
+      3) 遍历所有的增强器,将其转为Interceptor:MethodInterceptor[] interceptors = registry.getInterceptors(advisor);
+      4) 将增强器转为转为List<MethodInterceptor>: org.springframework.aop.framework.adapter.DefaultAdvisorAdapterRegistry#getInterceptors
+         1) 如果是MethodInterceptor,直接加入到集合中
+         2) 如果不是,使用AdvisorAdapter将增强器转为MethodInterceptor
+         3) 转换完成返回MethodInterceptor数组
+   4) 如果没有连接器链,直接执行目标方法
+      1) 拦截器链(每一个通知方法又被包装成方法拦截器,利用MethodInterceptor机制)
+   5) 如果有拦截器链,把需要执行的目标对象,目标方法,拦截器链等信息传入创建一个retVal = new CglibMethodInvocation(proxy, target, method, args, targetClass, chain, methodProxy).proceed();并调用各个增强器的org.springframework.aop.framework.adapter.MethodBeforeAdviceInterceptor#invoke方法里的return mi.proceed();
+   6) 拦截器链的触发过程:org.springframework.aop.framework.ReflectiveMethodInvocation#proceed
+      1) 如果没有拦截器执行目标方法或拦截器的索引和(拦截器数组size()-1)大小一样(指定到了最后的异常拦截器,则触发切入点(代理方法)调用)
+      2) 链式获取每一个拦截器,拦截器执行invoke方法,每一个拦截器等待下一个拦截器执行完成返回结果.利用拦截器链的机制,保证通知方法与目标方法的执行顺序;
+
+切面流程图:    	
+![切面流程图](./photo/aop-aspect process.png)	
 	
+- AOP总结
+
+1) 开启AOP: @EnableAspectJAutoProxy
+2) @EnableAspectJAutoProxy 会给容器中注册一个组件AnnotationAwareAspectJAutoProxyCreator,用于切面依赖的注入
+3) AnnotationAwareAspectJAutoProxyCreator 是一个后置处理器
+4) 容器的创建流程
+   1) registerBeanPostProcessors(beanFactory):创建AnnotationAwareAspectJAutoProxyCreator依赖bean;
+   2) finishBeanFactoryInitialization(beanFactory): 初始化剩下的单实例bean
+      1) 创建业务逻辑组件和切面组件
+      2) AnnotationAwareAspectJAutoProxyCreator 拦截组件的创建过程
+      3) 组件创建完成后,判断组件是否需要增强
+         1) 需要:将切面的通知方法包装成增强器(Advisor);给业务逻辑组件创建一个代理对象,在代理对象中对其进行增强处理
+5) 执行目标方法:
+   1) 代理对象执行目标
+   2) org.springframework.aop.framework.CglibAopProxy.DynamicAdvisedInterceptor#intercept
+      1) 得到目标方法的拦截器链,增强器包装成拦截器 MethodInterceptor
+      2) 利用拦截器的链式机制,依次进入每一个拦截器进行执行;
+      3) 效果:
+         1) 正常执行: 前置通知->目标方法->后置通知->返回通知
+         2) 异常执行: 前置通知->目标方法->异常通知->后置通知
+
+### 事务
+
+- 启用流程
+增加事务maven依赖:org.springframework.spring-tx
+@Transactional: 声明当前方法是一个事务方法    
+@EnableTransactionManagement: 开启基于注解的事务管理功能    
+配置事务管理器来控制事务    
+	@Bean
+	public PlatformTransactionManager transactionManager()
 	
-	
-	
-	
-	
-	
+#### 原理
+
+1) @EnableTransactionManagement
+	1) 利用TransactionManagementConfigurationSelector 给容器中导入两个组件
+	2) AutoProxyRegistrar,ProxyTransactionManagementConfiguration
+2) AutoProxyRegistrar
+   1) 给容器注册一个 InfrastructureAdvisorAutoProxyCreator 组件
+   2) 该组件利用后置处理器机制在对象创建后,包装对象,返回一个代理对象(增强器),代理对象执行方法利用拦截器链进行增强;
+3) ProxyTransactionManagementConfiguration
+   1) 给容器中注册事务增强器;
+      1) 事务增强器要用事务注解的信息,使用 AnnotationTransactionAttributeSource 来获取
+      2) 事务拦截器:
+         1) TransactionInterceptor: 保存了事务属性信息,事务管理器
+         2) 它是一个MethodInterceptor:
+            1) 在目标方法执行时
+               1) 执行拦截器链
+               2) 事务拦截器org.springframework.transaction.interceptor.TransactionAspectSupport#invokeWithinTransaction
+                  1) 先获取事务相关属性
+                  2) 再获取TransactionManager,具体是 PlatformTransactionManager .如果实现没有添加指定任何txManager ,最终会从容器汇总按照类型获取一个PlatformTransactionManager;所以自己必须要注入一个 PlatformTransactionManager 
+                  3) 执行目标方法
+                     1) 如果异常: 获取到事务管理器,利用事务管理回滚操作;
+                     2) 如果正常: 利用事务管理器,提交事务
+
+### 扩展原理
+
+BeanPostProcessor: bean后置处理器,bean创建对象初始化后进行拦截工作
+
+- BeanFactoryPostProcessor: 
+ 
+beanFactory的后置处理器.加载bean定义信息
+
+1) 在 BeanFactory 标准初始化后调用,来定制和修改 BeanFactory 的内容;
+2) 所有的bean定义已经保存加载到BeanFactory,但是bean的实例未创建
+
+原理:    
+1) ioc容器创建对象
+2) invokeBeanFactoryPostProcessors(beanFactory)
+   1) 如何找到所有的 BeanFactoryPostProcessor 并执行他们的方法
+      1) 直接在 BeanFactory 中找到所有类型是 BeanFactoryPostProcessor 的组件,并执行他们的方法
+      2) 在初始化创建其他组件前面执行
+
+- BeanDefinitionRegistryPostProcessor extends BeanFactoryPostProcessor
+
+postProcessBeanDefinitionRegistry(): 在所有bean定义信息将要被加载,bean实例还未创建时执行;
+1) 优先于 BeanFactoryPostProcessor 执行
+2) 利用 BeanDefinitionRegistryPostProcessor 给容器中再额外添加一些组件
+
+原理:    
+1) ioc创建对象
+2) refresh() -> invokeBeanFactoryPostProcessors(beanFactory)
+3) 从容器中获取到所有的 BeanDefinitionRegistryPostProcessor 组件
+   1) 依次触发所有的 postProcessBeanDefinitionRegistry() 
+   2) 再来触发 postProcessBeanFactory() 
+4) 再来从容器中找到上面未创建的 BeanFactoryPostProcessor 组件;然后依次触发 postProcessBeanFactory()
+
+- registerListeners(): ApplicationListener: 监听容器中发布的事件,事件驱动模型开发
+
+public interface ApplicationListener<E extends ApplicationEvent> extends EventListener    
+监听 ApplicationEvent 及其子事件    
+1) 写一个监听器来监听某个事件
+2) 把监听器加入到容器
+3) 只要容器中有相关事件的发布,就可以监听到这个事件
+   1) ContextRefreshedEvent: 容器刷新完成(所有bean都完全创建)会发布这个事件
+   2) ContextClosedEvent: 关闭容器会发布这个事件
+4) 发布一个事件
+   1) applicationContext.publishEvent();
+
+原理:    
+1) ContextRefreshedEvent
+   1) 容器创建对象->refresh()
+   2) finishRefresh();
+   3) publishEvent(new ContextRefreshedEvent(this)): 容器刷新完成会发布事件
+      1) 获取事件的多播器(派发器): getApplicationEventMulticaster()
+      2) multicastEvent(applicationEvent, eventType): 派发事件
+      3) 获取所有的ApplicationListener
+         1) 遍历监听器: getApplicationListeners(event, type)
+         2) 如果有 Executor 可以支持使用Executor进行异步派发
+         3) 否则,同步方式直接执行 listener 方法: invokeListener(listener, event)
+            1) 拿到listener回调 onApplicationEvent方法
+2) 自己发布的事件
+3) 容器关闭会发布 ContextClosedEvent
 	
 	
 	
