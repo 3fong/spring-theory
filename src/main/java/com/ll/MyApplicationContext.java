@@ -2,6 +2,7 @@ package com.ll;
 
 import com.ll.bean.Car;
 import com.ll.config.ContextConf;
+import com.ll.context.MyLifecycleProcessor;
 import com.ll.service.CarService;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -17,8 +18,9 @@ public class MyApplicationContext {
         CarService carService = context.getBean(CarService.class);
         String run = carService.run();
         System.out.println(run);
-        context.publishEvent(new ContextClosedEvent(context));
-        context.publishEvent(new ContextStartedEvent(context));
-        context.publishEvent(new ContextStoppedEvent(context));
+//        context.register(MyLifecycleProcessor.class);
+//        context.publishEvent(new ContextClosedEvent(context));
+//        context.publishEvent(new ContextStartedEvent(context));
+//        context.publishEvent(new ContextStoppedEvent(context));
     }
 }

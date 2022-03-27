@@ -432,11 +432,13 @@ postProcessBeanDefinitionRegistry(): 在所有bean定义信息将要被加载,be
    2) 再来触发 postProcessBeanFactory() 
 4) 再来从容器中找到上面未创建的 BeanFactoryPostProcessor 组件;然后依次触发 postProcessBeanFactory()
 
-- registerListeners(): ApplicationListener: 监听容器中发布的事件,事件驱动模型开发
+- ApplicationListener: 监听容器中发布的事件,事件驱动模型开发
 
 public interface ApplicationListener<E extends ApplicationEvent> extends EventListener    
 监听 ApplicationEvent 及其子事件    
-1) 写一个监听器来监听某个事件
+1) 写一个监听器(ApplicationListener 实现类)来监听某个事件(ApplicationEvent及其子类)
+   1) 添加 [@EventListener](https://docs.spring.io/spring-framework/docs/6.0.x/reference/html/core.html#context-functionality-events-annotation)
+   2) 原理: 使用 EventListenerMethodProcessor 来解析方法上的 @EventListener
 2) 把监听器加入到容器
 3) 只要容器中有相关事件的发布,就可以监听到这个事件
    1) ContextRefreshedEvent: 容器刷新完成(所有bean都完全创建)会发布这个事件
@@ -459,9 +461,29 @@ public interface ApplicationListener<E extends ApplicationEvent> extends EventLi
 2) 自己发布的事件
 3) 容器关闭会发布 ContextClosedEvent
 	
+- 事件多播器(派发器)
+
+1) 容器创建对象: refresh()
+2) initApplicationEventMulticaster(): 初始化 ApplicationEventMulticaster
+   1) 先去容器中找有没有 id= "applicationEventMulticaster" 的组件
+   2) 如果没有则自己创建 this.applicationEventMulticaster = new SimpleApplicationEventMulticaster(beanFactory);
+      1) 并将其加入到容器中,在其他组件派发事件时,自动注入该组件
+
 	
-	
-	
+- 注册监听器: registerListeners()
+
+1) 容器创建对象: refresh()	
+2) registerListeners():
+   1) 从容器中拿到所有的监听器,把他们注册到 applicationEventMulticaster 中
+
+- SmartInitializingSingleton 原理
+
+该SPI定义了唯一的方法: afterSingletonsInstantiated()    
+1) 容器创建对象: refresh()	
+2) finishBeanFactoryInitialization(beanFactory);:实例化所有的保留单实例bean
+   1) 先创建所有的单实例bean: getBean()
+   2) 获取所有创建好的单实例bean,判断是否是 SmartInitializingSingleton 类型
+      1) 如果是旧调用 afterSingletonsInstantiated() 方法
 	
 	
 	

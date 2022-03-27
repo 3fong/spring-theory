@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
  * @Description
  * @create 2022/3/26 17:42
  */
-@Component
+//@Component
 public class MyContextCloseEvent implements ApplicationListener {
     @Override
     public void onApplicationEvent(ApplicationEvent event) {
