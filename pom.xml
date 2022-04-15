@@ -13,6 +13,7 @@
         <module>spring-annotation</module>
         <module>spring-web-demo</module>
         <module>spring-mvc-demo</module>
+        <module>servlet3.0</module>
     </modules>
 
     <properties>

@@ -1,4 +1,4 @@
-package com.ll.conf;
+package com.ll.annotation.conf;
 
 import javax.servlet.*;
 import javax.servlet.annotation.WebServlet;
@@ -16,6 +16,16 @@ import java.io.IOException;
 public class MyHttpServlet extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        saySleep();
         resp.getWriter().write("hello...");
+    }
+
+    public void saySleep() {
+        System.out.println("sleep..............");
+        try {
+            Thread.sleep(3000L);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

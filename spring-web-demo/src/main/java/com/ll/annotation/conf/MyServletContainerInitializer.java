@@ -1,4 +1,4 @@
-package com.ll.conf;
+package com.ll.annotation.conf;
 
 import com.ll.service.MyService;
 

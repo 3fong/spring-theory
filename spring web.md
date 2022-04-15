@@ -65,15 +65,45 @@ tip: web项目注意项目的目录结构.META-INF要在项目代码源中才会
 
 [web.xml配置方式](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html)
 
+### 定制spring mvc
+
+springmvc模型:
+
+[springmvc模型](./photo/springmvc模型.png)
+
+DispatcherServlet: 外层分发处理器.它由两部分组成:
+1) root WebApplicationContext: 根容器.用于加载数据源,中间件
+2) Servlet WebApplicationContext: servlet容器.包含了controller,视图解析器;web相关的bean    
+
+注解方式
+
+1) @EnableWebMvc: 开启springmvc定制配置功能.功能等同于:<mvc:annotation-driven>
+2) 配置组件(视图解析器,视图映射,静态资源映射,拦截器...) 定制springmvc的扩展接口    
+   1) extends WebMvcConfigurer
+
+
+### servlet3.0
+
+核心特性: 异步请求
+
+3.0前,servlet采用thread-per-request的方式处理请求,每一次http请求由一个线程从头到尾负责;    
+如果一个请求需要进行io操作,如数据库访问,调用第三方接口等,那么其对应的线程将同步地等待熊操作完成,而io操作是非常慢的,所以此时线程并能及时地释放回线程池,在并发量越来越大时,会存在严重的性能问题;由于servlet属于底层框架,所以它在3.0引入了异步处理,然后再servlet3.1又引入了非阻塞io来进一步增强异步处理性能;
+
+- 使用方式
+
+1) @WebServlet(value="/async",asyncSupported = true)
+2) HttpServletRequest.startAsync()
+3) startAsync.start(new Runnable() {public void run() {...}});
+
+#### spring mvc 异步
 
 
 
 
 
 
-
-
-
+### 参考资料
+[spring mvc](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html)
 
 
 
